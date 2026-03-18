@@ -1,0 +1,23 @@
+{
+  "name": "@roomy-space/actors",
+  "version": "0.0.1-alpha.1",
+  "description": "Rivet actors for Roomy services.",
+  "main": "start.ts",
+  "type": "module",
+  "scripts": {
+    "start": "tsx runner.ts"
+  },
+  "keywords": [],
+  "author": "Zicklag",
+  "license": "ISC",
+  "packageManager": "pnpm@10.32.1",
+  "dependencies": {
+    "@hono/node-server": "^1.19.11",
+    "@hono/node-ws": "^1.3.0",
+    "rivetkit": "^2.1.6"
+  },
+  "devDependencies": {
+    "tsx": "catalog:",
+    "@types/node": "catalog:"
+  }
+}

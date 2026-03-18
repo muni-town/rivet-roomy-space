@@ -1,0 +1,8 @@
+packages:
+  - actors
+allowBuilds:
+  esbuild: true
+catalog:
+  '@types/node': ^25.5.0
+  tsx: ^4.21.0
+catalogMode: strict
