@@ -5,17 +5,14 @@
   "main": "start.ts",
   "type": "module",
   "scripts": {
-    "start": "tsx serve.ts",
-    "dev": "tsx runner.ts"
+    "start": "bun serve.ts",
+    "dev": "bun runner.ts"
   },
   "keywords": [],
   "author": "Zicklag",
-  "license": "ISC",
-  "packageManager": "pnpm@10.32.1",
   "dependencies": {
     "@hono/node-server": "^1.19.11",
     "@hono/node-ws": "^1.3.0",
-    "hono": "^4.12.8",
     "rivetkit": "^2.1.6"
   }
 }

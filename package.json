@@ -3,9 +3,5 @@
   "version": "0.0.1",
   "workspaces": [
     "actors"
-  ],
-  "devDependencies": {
-    "@types/node": "^25.5.0",
-    "tsx": "^4.21.0"
-  }
+  ]
 }
