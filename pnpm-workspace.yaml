@@ -4,5 +4,6 @@ allowBuilds:
   esbuild: true
 catalog:
   '@types/node': ^25.5.0
+  hono: ^4.12.8
   tsx: ^4.21.0
 catalogMode: strict

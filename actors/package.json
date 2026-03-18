@@ -5,7 +5,8 @@
   "main": "start.ts",
   "type": "module",
   "scripts": {
-    "start": "tsx runner.ts"
+    "start": "tsx serve.ts",
+    "dev": "tsx runner.ts"
   },
   "keywords": [],
   "author": "Zicklag",
@@ -14,10 +15,11 @@
   "dependencies": {
     "@hono/node-server": "^1.19.11",
     "@hono/node-ws": "^1.3.0",
+    "hono": "catalog:",
     "rivetkit": "^2.1.6"
   },
   "devDependencies": {
-    "tsx": "catalog:",
-    "@types/node": "catalog:"
+    "@types/node": "catalog:",
+    "tsx": "catalog:"
   }
 }
