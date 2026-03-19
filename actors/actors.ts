@@ -1,4 +1,5 @@
 import { actor, event, setup } from "rivetkit";
+import { operatorAuth } from "./actors/operatorAuth";
 
 const counter = actor({
   state: { count: 0 },
@@ -15,5 +16,5 @@ const counter = actor({
 });
 
 export const registry = setup({
-  use: { counter },
+  use: { counter, operatorAuth },
 });
