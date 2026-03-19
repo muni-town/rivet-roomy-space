@@ -20,5 +20,8 @@
     "iso-signatures": "^0.5.1",
     "iso-ucan": "^0.4.2",
     "rivetkit": "^2.1.6"
+  },
+  "devDependencies": {
+    "@atproto/api": "^0.19.4"
   }
 }
