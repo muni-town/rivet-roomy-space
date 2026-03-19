@@ -3,155 +3,170 @@ import { EdDSASigner } from "iso-signatures/signers/eddsa.js";
 import { Store } from "iso-ucan/store";
 import { type } from "arktype";
 import { capabilities, kvDriver, verifierResolver } from "../ucan";
-import { Capability } from "iso-ucan/capability";
 import { IdResolver, MemoryCache } from "@atproto/identity";
 import { verifyJwt } from "@atproto/xrpc-server";
-import { DID } from "iso-ucan/types";
 import { Invocation } from "iso-ucan/invocation";
+import { Delegation } from "iso-ucan/delegation";
 
 const ActorCreateInput = type({
-  adminDids: "string[]",
+	adminDids: "string[]",
 });
-
 const ConnParams = type({
-  clientDid: "string",
-  serviceAuthToken: "string",
-}).or(type.undefined);
-
-type State = { privateKey: string; adminDids: string[] };
+	clientDid: "string",
+	serviceAuthToken: "string",
+})
+	.or(type.undefined)
+	.or(type.null);
+type State = {
+	privateKey: string;
+	adminDids: string[];
+};
 type ConnState = { did: string; clientDid: string } | undefined;
 type Vars = {
-  signer: EdDSASigner;
-  store: Store;
-  idResolver: IdResolver;
+	signer: EdDSASigner;
+	store: Store;
+	idResolver: IdResolver;
 };
 
 export const operatorAuth = actor({
-  state: {
-    privateKey: "",
-    adminDids: [] as string[],
-  },
-  onCreate: async (c, rawInput) => {
-    // This is a singleton actor that can only be created as "main"
-    if (c.key.length != 1 || c.key[0] != "main") {
-      console.error(
-        'Cannot create operatorAuth actor with key other than ["main"]:',
-        c.key,
-      );
-      // If this actor is not "main" immediately destroy it
-      c.destroy();
-      return;
-    }
+	state: {
+		privateKey: "",
+		adminDids: [] as string[],
+	},
 
-    // Error if no admin DIDs were specified
-    const input = ActorCreateInput(rawInput);
-    if (input instanceof type.errors) {
-      console.error("Invalid creation input to operatorAuth:", input.summary);
-      c.destroy();
-      return;
-    }
+	onCreate: async (c, rawInput) => {
+		// This is a singleton actor that can only be created as "main"
+		if (c.key.length != 1 || c.key[0] != "main") {
+			console.error(
+				'Cannot create operatorAuth actor with key other than ["main"]:',
+				c.key,
+			);
+			// If this actor is not "main" immediately destroy it
+			c.destroy();
+			return;
+		}
 
-    // Set the admin IDS
-    c.state.adminDids = input.adminDids;
+		// Parse creation args
+		const input = ActorCreateInput(rawInput);
+		if (input instanceof type.errors) {
+			console.error("Invalid creation input to operatorAuth:", input.summary);
+			c.destroy();
+			return;
+		}
 
-    // Generate a new signing key
-    c.state.privateKey = (await EdDSASigner.generate()).export();
-  },
-  createVars: async (c) => {
-    // This can happen if creation fails, but this lifecycle hook will still run
-    if (c.aborted) return undefined as any;
+		// Initialize state
+		c.state.adminDids = input.adminDids;
+		c.state.privateKey = (await EdDSASigner.generate()).export();
+	},
 
-    return {
-      signer: await EdDSASigner.import(c.state.privateKey),
-      store: new Store(kvDriver(c.kv)),
-      idResolver: new IdResolver({
-        didCache: new MemoryCache(),
-      }),
-    };
-  },
+	createVars: async (c) => {
+		// This can happen if creation fails, but this lifecycle hook will still run
+		if (c.aborted) return undefined as any;
 
-  createConnState: async (c, rawParams?): Promise<ConnState> => {
-    const { idResolver } = c.vars as Vars;
+		return {
+			signer: await EdDSASigner.import(c.state.privateKey),
+			store: new Store(kvDriver(c.kv)),
+			idResolver: new IdResolver({
+				didCache: new MemoryCache(),
+			}),
+		};
+	},
 
-    const params = ConnParams(rawParams);
-    if (!params) return;
+	createConnState: async (c, rawParams?): Promise<ConnState> => {
+		const { idResolver } = c.vars as Vars;
 
-    try {
-      // Parse parameters
-      if (params instanceof type.errors) {
-        throw new UserError(
-          `Failed to parse connection parameters: ${params.summary}`,
-        );
-      }
+		// Parse the connection params or return an unauthenticated connection.
+		const params = ConnParams(rawParams);
+		if (!params) return;
 
-      const jwt = params.serviceAuthToken;
+		try {
+			if (params instanceof type.errors) {
+				throw new UserError(
+					`Failed to parse connection parameters: ${params.summary}`,
+				);
+			}
 
-      const payload = await verifyJwt(
-        jwt,
-        null,
-        null,
-        async (did, forceRefresh) => {
-          const atprotoData = await idResolver.did.resolveAtprotoData(
-            did,
-            forceRefresh,
-          );
-          return atprotoData.signingKey;
-        },
-      );
-      const did = payload.iss;
+			// Get the ATProto service auth JWT
+			const jwt = params.serviceAuthToken;
 
-      if (!c.state.adminDids.includes(did)) {
-        throw new UserError("User is not an admin.");
-      }
+			// Verify the service auth JWT
+			const payload = await verifyJwt(
+				jwt,
+				null,
+				null,
+				async (did, forceRefresh) => {
+					const atprotoData = await idResolver.did.resolveAtprotoData(
+						did,
+						forceRefresh,
+					);
+					return atprotoData.signingKey;
+				},
+			);
 
-      return { did, clientDid: params.clientDid };
-    } catch (e) {
-      console.warn("Auth error", e);
-      return undefined;
-    }
-  },
+			// Get the authenticated DID
+			const did = payload.iss;
 
-  actions: {
-    /** Get the signing key for the operator actor. */
-    signingKey(c) {
-      return c.vars.signer.toString();
-    },
-    requestEchoDelegation: async (c) => {
-      if (!c.conn.state?.did) throw new UserError("Not authenticated");
+			// Make sure the user is an admin
+			if (!c.state.adminDids.includes(did)) {
+				throw new UserError("User is not an admin.");
+			}
 
-      const delegation = await capabilities.Echo.delegate({
-        iss: c.vars.signer,
-        aud: c.conn.state.clientDid as DID,
-        store: c.vars.store,
-        sub: c.vars.signer.did,
-        pol: [],
-        exp: Math.round(Date.now() / 1000) + 3600,
-      });
-      await c.vars.store.add([delegation]);
+			// Return authenticated connection
+			return { did, clientDid: params.clientDid };
+		} catch (e) {
+			throw new UserError(`Authentication error: ${e}`);
+		}
+	},
 
-      return { delegation: delegation.toString() };
-    },
-    echo: async ({ vars: { signer, store } }, rawInvocation: Uint8Array) => {
-      const invocation = await Invocation.from({
-        bytes: rawInvocation,
-        audience: signer.verifiableDid,
-        resolveProof: store.resolveProof.bind(store),
-        verifierResolver,
-      });
+	actions: {
+		/** Get the signing key for the operator actor. */
+		signingKey(c) {
+			return c.vars.signer.toString();
+		},
 
-      const args = capabilities.Echo.schema(invocation.payload.args as any);
-      if (args instanceof type.errors) {
-        throw new UserError(`Could not parse arguments: ${args.summary}`);
-      }
+		/** Get the admin  */
+		requestAdminDelegations: async (c) => {
+			if (!c.conn.state?.did) throw new UserError("Not authenticated");
 
-      return { content: args.content };
-    },
-  },
+			const delegations = [
+				// Create a delegation that allows all access to the operatorAuth actor
+				await Delegation.create({
+					iss: c.vars.signer,
+					aud: c.conn.state.clientDid,
+					sub: c.vars.signer.did,
+					pol: [],
+					exp: Math.round(Date.now() / 1000) + 3600, // Last one hour
+					cmd: "/",
+				}),
+			];
+
+			await c.vars.store.add(delegations);
+
+			return { delegations: delegations.map((x) => x.toString()) };
+		},
+
+		/** Simple test endpoint that demonstrates UCAN auth. */
+		echo: async ({ vars: { signer, store } }, rawInvocation: Uint8Array) => {
+			const invocation = await Invocation.from({
+				bytes: rawInvocation,
+				audience: signer.verifiableDid,
+				resolveProof: store.resolveProof.bind(store),
+				verifierResolver,
+			});
+
+			const args = capabilities.Echo.schema(invocation.payload.args as any);
+			if (args instanceof type.errors) {
+				throw new UserError(`Could not parse arguments: ${args.summary}`);
+			}
+
+			return { content: args.content };
+		},
+	},
 }) satisfies ActorDefinition<
-  State,
-  typeof ConnParams.infer,
-  ConnState,
-  Vars,
-  typeof ActorCreateInput.infer,
-  any
+	State,
+	typeof ConnParams.infer,
+	ConnState,
+	Vars,
+	typeof ActorCreateInput.infer,
+	any
 >;

@@ -1,0 +1,4 @@
+[submodule "iso-repo"]
+	path = iso-repo
+	url = git@github.com:zicklag/iso-repo.git
+	branch = fix-invocation

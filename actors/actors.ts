@@ -1,20 +1,9 @@
-import { actor, event, setup } from "rivetkit";
-import { operatorAuth } from "./actors/operatorAuth";
+import { setup } from "rivetkit";
 
-const counter = actor({
-  state: { count: 0 },
-  events: {
-    count: event<number>(),
-  },
-  actions: {
-    increment: (c, amount: number) => {
-      c.state.count += amount;
-      c.broadcast("count", c.state.count);
-      return c.state.count;
-    },
-  },
-});
+import { operatorAuth } from "./actors/operatorAuth";
+import { roomySink } from "./actors/roomySink";
+import { streamplaceSource } from "./actors/streamplaceSource";
 
 export const registry = setup({
-  use: { counter, operatorAuth },
+	use: { operatorAuth, roomySink, streamplaceSource },
 });

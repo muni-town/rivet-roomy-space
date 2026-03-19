@@ -1,14 +1,41 @@
-import { ActorKv } from "rivetkit";
-import { Driver } from "iso-kv";
+import { type ActorKv, UserError } from "rivetkit";
+import type { Driver } from "iso-kv";
 
 import * as EdDSA from "iso-signatures/verifiers/eddsa.js";
 import { Resolver } from "iso-signatures/verifiers/resolver.js";
 import { Capability } from "iso-ucan/capability";
 import { type } from "arktype";
+import { DID } from "iso-did";
+import { Invocation } from "iso-ucan/invocation";
+import type { Store } from "iso-ucan/store";
 
 export const verifierResolver = new Resolver({
   ...EdDSA.verifier,
 });
+
+export async function validateAdminInvocation(opts: {
+  operatorAuthDid: string | DID;
+  expectedCmd: string;
+  store: Store;
+  invocation: Uint8Array;
+}) {
+  const did =
+    typeof opts.operatorAuthDid === "string"
+      ? await DID.fromString(opts.operatorAuthDid)
+      : opts.operatorAuthDid;
+
+  const inv = await Invocation.from({
+    bytes: opts.invocation,
+    audience: did.verifiableDid,
+    verifierResolver,
+    resolveProof: (x) => opts.store.resolveProof(x),
+  });
+  if (inv.payload.cmd !== "/actor/create") {
+    throw new UserError(
+      `Invalid invocation command ( ${inv.payload.cmd} ) expected /actor/create`,
+    );
+  }
+}
 
 /** Key-value key segment separator */
 
@@ -32,7 +59,8 @@ export function kvDriver(kv: ActorKv): Driver {
     },
     async set(key, value) {
       await kv.put(k(key), JSON.stringify(value));
-      return driver as any; // Hack 'cause the DriverAsync type we need isn't public in iso-kv
+      // biome-ignore lint/suspicious/noExplicitAny: Hack 'cause the DriverAsync type we need isn't public in iso-kv
+      return driver as any;
     },
     async *[Symbol.asyncIterator]() {
       const list = await kv.list(UCAN_KEY_PREFIX);
@@ -51,6 +79,11 @@ export const capabilities = {
     schema: type({
       content: "string",
     }),
+    verifierResolver,
+  }),
+  CreateActor: Capability.from({
+    cmd: "/actor/create",
+    schema: type({}),
     verifierResolver,
   }),
 };

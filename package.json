@@ -2,6 +2,7 @@
   "name": "my-project",
   "version": "0.0.1",
   "workspaces": [
-    "actors"
+    "actors",
+    "iso-repo/packages/*"
   ]
 }
