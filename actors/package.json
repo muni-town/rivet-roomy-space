@@ -11,6 +11,8 @@
 	"keywords": [],
 	"author": "Zicklag",
 	"dependencies": {
+		"@atcute/atproto": "^3.1.10",
+		"@atcute/jetstream": "^1.1.2",
 		"@atproto/identity": "^0.4.12",
 		"@atproto/xrpc-server": "^0.10.17",
 		"@hono/node-server": "^1.19.11",
