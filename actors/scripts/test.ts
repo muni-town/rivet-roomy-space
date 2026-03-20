@@ -7,7 +7,6 @@ import { capabilities } from "../ucan";
 import { Store } from "iso-ucan/store";
 import { MemoryDriver } from "iso-kv/drivers/memory.js";
 import { ulid } from "ulidx";
-import { streamplaceSource } from "../actors/streamplaceSource";
 
 const store = new Store(new MemoryDriver());
 
@@ -60,26 +59,49 @@ await store.add(
   await Promise.all(delegations.map((x) => Delegation.fromString(x))),
 );
 
-const invocation = await capabilities.CreateActor.invoke({
+const convertInvocation = await capabilities.CreateActor.invoke({
   iss: clientId,
   sub: operatorAuthKey,
   args: {},
   store,
 });
 
-const sink = await rivet.streamplaceSource.create(ulid(), {
+const convertId = ulid();
+const converter = await rivet.convertStreamplaceToRoomy.create(convertId, {
   input: {
-    streamplaceStreamDid: "did:plc:ulg2bzgrgs7ddjjlmhtegk3v",
-    startDate: new Date(Date.now() + 2000).toString(),
-    endDate: new Date(Date.now() + 18000).toString(),
     targetQueue: {
       actorKey: ["test"],
       actorKind: "test",
       queueName: "events",
     },
-    invocation: invocation.bytes,
-    delegations: invocation.delegations.map((x) => x.toString()),
+    invocation: convertInvocation.bytes,
+    delegations: convertInvocation.delegations.map((x) => x.toString()),
+  },
+});
+console.log("converter:", await converter.signingKey());
+
+const sourceInvocation = await capabilities.CreateActor.invoke({
+  iss: clientId,
+  sub: operatorAuthKey,
+  args: {},
+  store,
+});
+
+const iameli = "did:plc:2zmxikig2sj7gqaezl5gntae";
+const zicklag = "did:plc:ulg2bzgrgs7ddjjlmhtegk3v";
+const source = await rivet.streamplaceSource.create(ulid(), {
+  input: {
+    streamplaceStreamDid: iameli,
+    startDate: new Date(Date.now() + 1000).toString(),
+    endDate: new Date(Date.now() + 60 * 5 * 1000).toString(),
+    targetQueue: {
+      actorKey: [convertId],
+      actorKind: "convertStreamplaceToRoomy",
+      queueName: "events",
+    },
+    invocation: sourceInvocation.bytes,
+    delegations: sourceInvocation.delegations.map((x) => x.toString()),
   },
 });
 
-console.log(await sink.signingKey());
+console.log("source", await source.signingKey());

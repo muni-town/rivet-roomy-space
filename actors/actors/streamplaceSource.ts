@@ -174,7 +174,10 @@ export const streamplaceSource = actor({
 
     await sleep(untilStart);
 
-    const client = c.client();
+    // Get a handle to the actor we are going to send messages to
+    const targetActor = c
+      .client()
+      .get(c.state.targetQueue.actorKind, c.state.targetQueue.actorKey);
 
     // Time to start streaming!
     await c.keepAwake(
@@ -183,17 +186,10 @@ export const streamplaceSource = actor({
         const now = Date.now();
         const finish = sleep(end - now).then((_) => "finished" as const);
 
-        // Get a handle to the actor we are going to send messages to
-        const targetActor = client.get(
-          c.state.targetQueue.actorKind,
-          c.state.targetQueue.actorKey,
-        );
-
         // Subscribe to the jetstream for the configured streamplace stream.
         const subscription = new JetstreamSubscription({
           url: "wss://jetstream2.us-east.bsky.network",
           wantedCollections: ["place.stream.chat.message"],
-          wantedDids: [c.state.streamplaceStreamDid as Did],
         });
         const iterator = subscription[Symbol.asyncIterator]();
 
@@ -209,18 +205,41 @@ export const streamplaceSource = actor({
           // Ignore irrelevant events
           if (event.kind != "commit") continue;
 
+          // Ignore messages that aren't in the stream that we are interested in
+          if (
+            "record" in event.commit &&
+            (event.commit.record as { streamer?: string })?.streamer !==
+              c.state.streamplaceStreamDid
+          ) {
+            continue;
+          }
+
+          // Queue the commit event to the target queue
           try {
-            // Queue the commit event to the target queue
             await targetActor.send(c.state.targetQueue.queueName, event);
           } catch (e) {
             console.error(e);
           }
         }
 
-        console.log("done streaming");
-        c.destroy();
+        // Tell the target queue that we are done streaming events.
+        try {
+          console.log("Sending finished");
+          await targetActor.send(c.state.targetQueue.queueName, "finished");
+        } catch (e) {
+          console.error(e);
+        }
       })(),
     );
+
+    console.log("done streaming");
+    c.destroy();
+
+    while (true) {
+      if (c.aborted) break;
+      await sleep(1000);
+    }
+    console.log("exiting source");
   },
 }) satisfies ActorDefinition<
   State,
