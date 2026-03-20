@@ -5,6 +5,8 @@ FROM oven/bun:1.3.11-alpine AS builder
 #ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 
 COPY . /project
+WORKDIR /project
+RUN bun install
 WORKDIR /project/actors
 
 RUN bun install
